@@ -39,6 +39,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import com.moneymate.app.auth.AuthGate
+import com.moneymate.app.auth.AuthStore
 import com.moneymate.app.receipt.ReceiptDraft
 import com.moneymate.app.receipt.ReceiptScannerFab
 import com.moneymate.app.receipt.rememberReceiptScanner
@@ -71,14 +73,15 @@ data class Transaction(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { MoneyMate() }
+        setContent { AuthGate(onAccountReplaced = { TransactionStore(this).clear() }) { onLogout -> MoneyMate(onLogout) } }
     }
 }
 
 @Composable
-internal fun MoneyMate() {
+internal fun MoneyMate(onLogout: (() -> Unit)? = null) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val store = remember { TransactionStore(context) }
+    val userName = remember { AuthStore(context).displayName }
     val transactions = remember { mutableStateListOf<Transaction>().also { it.addAll(store.load()) } }
     var page by rememberSaveable { mutableIntStateOf(0) }
     var adding by rememberSaveable { mutableStateOf(false) }
@@ -122,7 +125,7 @@ internal fun MoneyMate() {
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 when (page) {
-                    0 -> Dashboard(transactions, onAdd = openManual)
+                    0 -> Dashboard(transactions, userName, onAdd = openManual, onLogout = onLogout)
                     1 -> ActivityPage(
                         transactions = transactions,
                         onUpdate = { updated ->
@@ -161,11 +164,16 @@ internal fun MoneyMate() {
 }
 
 @Composable
-private fun Dashboard(transactions: List<Transaction>, onAdd: () -> Unit) {
+private fun Dashboard(transactions: List<Transaction>, userName: String, onAdd: () -> Unit, onLogout: (() -> Unit)?) {
     val income = transactions.filter { it.kind == TransactionKind.INCOME }.sumOf { it.amount }
     val expenses = transactions.filter { it.kind == TransactionKind.EXPENSE }.sumOf { it.amount }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item { Title("Good morning", "Your money snapshot") }
+        item {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.weight(1f)) { Title(if (userName.isBlank()) "Good morning" else "Good morning, $userName", "Your money snapshot") }
+                if (onLogout != null) IconButton(onClick = onLogout) { Icon(Icons.Default.Logout, "Log out", tint = Muted) }
+            }
+        }
         item { BalanceCard(income - expenses, income, expenses) }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -469,6 +477,7 @@ private class TransactionStore(context: Context) {
             if (p.size == 6) runCatching { Transaction(p[0], p[1], p[2], p[3].toDouble(), TransactionKind.valueOf(p[4]), p[5].toLong()) }.getOrNull() else null
         }
     }
+    fun clear() { prefs.edit().remove("items").commit() }
     fun save(items: List<Transaction>) { prefs.edit().putString("items", items.joinToString("\\n") { "${it.id}|${it.name.replace("|", " ")}|${it.category}|${it.amount}|${it.kind}|${it.timestamp}" }).apply() }
 }
 
