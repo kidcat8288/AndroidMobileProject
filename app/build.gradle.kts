@@ -1,8 +1,17 @@
+import java.util.Properties // [ADDED] to read local.properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+// [ADDED] Email-code settings come from local.properties (not committed) or gradle.properties
+val localProperties = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+fun configValue(key: String): String =
+    (localProperties.getProperty(key) ?: providers.gradleProperty(key).orNull ?: "").trim().replace("\"", "")
 
 android {
     namespace = "com.moneymate.app"
@@ -14,8 +23,14 @@ android {
         versionCode = 1
         versionName = "1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // [ADDED] Supabase URL + key for the email codes
+        buildConfigField("String", "SUPABASE_URL", "\"${configValue("supabase.url")}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${configValue("supabase.anonKey")}\"")
     }
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true // [ADDED]
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

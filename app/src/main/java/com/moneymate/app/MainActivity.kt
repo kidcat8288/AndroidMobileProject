@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.ReadOnlyComposable // [ADDED]
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,17 +48,29 @@ import com.moneymate.app.receipt.rememberReceiptScanner
 import com.moneymate.app.report.ReportDateControls
 import com.moneymate.app.report.ReportPeriod
 import com.moneymate.app.report.reportDateRange
+// [ADDED] dark mode + Settings screen
+import com.moneymate.app.settings.MoneyMateTheme
+import com.moneymate.app.settings.SettingsScreen
+import com.moneymate.app.settings.SettingsStore
+import com.moneymate.app.settings.ThemeMode
 import kotlinx.coroutines.launch
 
-private val Forest = Color(0xFF10261F)
-private val Green = Color(0xFF267552)
-private val Mint = Color(0xFFDDF5E8)
-private val Background = Color(0xFFF7FAF8)
-private val Ink = Color(0xFF17251F)
-private val Muted = Color(0xFF6A7972)
-private val Red = Color(0xFFC6434D)
+// [CHANGED] These used to be fixed light colors. Now most of them come from the theme,
+// so they switch in dark mode. Every Color.White background became CardSurface.
+// Chart colors stay the same in light and dark mode
 private val Gold = Color(0xFFF0AF45)
 private val Blue = Color(0xFF659DCD)
+private val ChartGreen = Color(0xFF267552)
+private val ChartRed = Color(0xFFC6434D)
+// Everything else follows the light/dark choice in Settings
+private val Forest: Color @Composable @ReadOnlyComposable get() = MoneyMateTheme.colors.balanceCard
+private val Green: Color @Composable @ReadOnlyComposable get() = MoneyMateTheme.colors.green
+private val Mint: Color @Composable @ReadOnlyComposable get() = MoneyMateTheme.colors.mint
+private val Background: Color @Composable @ReadOnlyComposable get() = MoneyMateTheme.colors.background
+private val CardSurface: Color @Composable @ReadOnlyComposable get() = MoneyMateTheme.colors.surface
+private val Ink: Color @Composable @ReadOnlyComposable get() = MoneyMateTheme.colors.ink
+private val Muted: Color @Composable @ReadOnlyComposable get() = MoneyMateTheme.colors.muted
+private val Red: Color @Composable @ReadOnlyComposable get() = MoneyMateTheme.colors.red
 
 enum class TransactionKind { INCOME, EXPENSE }
 
@@ -73,15 +86,32 @@ data class Transaction(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { AuthGate(onAccountReplaced = { TransactionStore(this).clear() }) { onLogout -> MoneyMate(onLogout) } }
+        // [CHANGED] app theme
+        setContent {
+            val settings = remember { SettingsStore(applicationContext) }
+            var themeMode by remember { mutableStateOf(settings.themeMode) }
+            val changeTheme: (ThemeMode) -> Unit = { mode -> themeMode = mode; settings.themeMode = mode }
+            MoneyMateTheme(themeMode) {
+                AuthGate(onAccountReplaced = { TransactionStore(this).clear() }) { onLogout ->
+                    MoneyMate(onLogout, themeMode, changeTheme)
+                }
+            }
+        }
     }
 }
 
 @Composable
-internal fun MoneyMate(onLogout: (() -> Unit)? = null) {
+internal fun MoneyMate( // [CHANGED] added themeMode + onThemeModeChange
+    onLogout: (() -> Unit)? = null,
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    onThemeModeChange: (ThemeMode) -> Unit = {}
+) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val store = remember { TransactionStore(context) }
-    val userName = remember { AuthStore(context).displayName }
+    val auth = remember { AuthStore(context) } // [ADDED]
+    val userName = remember { auth.displayName }
+    var emailCodeAtLogin by remember { mutableStateOf(auth.emailCodeAtLogin) }
+    var showSettings by rememberSaveable { mutableStateOf(false) } // [ADDED]
     val transactions = remember { mutableStateListOf<Transaction>().also { it.addAll(store.load()) } }
     var page by rememberSaveable { mutableIntStateOf(0) }
     var adding by rememberSaveable { mutableStateOf(false) }
@@ -98,14 +128,24 @@ internal fun MoneyMate(onLogout: (() -> Unit)? = null) {
             adding = true
         }
     }
-    val colors = lightColorScheme(primary = Green, secondary = Green, background = Background, surface = Color.White, onSurface = Ink)
-
-    MaterialTheme(colorScheme = colors) {
+    // [CHANGED] was MaterialTheme
+    MoneyMateTheme(themeMode) {
+        if (showSettings) {
+            SettingsScreen(
+                themeMode = themeMode,
+                onThemeModeChange = onThemeModeChange,
+                accountEmail = auth.email,
+                emailCodeAtLogin = emailCodeAtLogin,
+                onEmailCodeAtLoginChange = { on -> auth.emailCodeAtLogin = on; emailCodeAtLogin = on },
+                onBack = { showSettings = false },
+                onLogout = onLogout
+            )
+        } else {
         Scaffold(
             containerColor = Background,
             snackbarHost = { SnackbarHost(snackbar) },
             bottomBar = {
-                NavigationBar(containerColor = Color.White) {
+                NavigationBar(containerColor = CardSurface) { // [CHANGED] was Color.White
                     val tabs = listOf(Icons.Default.Home to "Home", Icons.Default.ReceiptLong to "Activity", Icons.Default.PieChart to "Reports", Icons.Default.Savings to "Budget")
                     tabs.forEachIndexed { index, tab ->
                         NavigationBarItem(selected = page == index, onClick = { page = index }, icon = { Icon(tab.first, tab.second) }, label = { Text(tab.second) })
@@ -116,7 +156,7 @@ internal fun MoneyMate(onLogout: (() -> Unit)? = null) {
                 if (page < 2) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.End) {
                         ReceiptScannerFab(scanner)
-                        FloatingActionButton(onClick = openManual, containerColor = Green, contentColor = Color.White, shape = CircleShape) {
+                        FloatingActionButton(onClick = openManual, containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary, shape = CircleShape) { // [CHANGED]
                             Icon(Icons.Default.Add, "Add transaction")
                         }
                     }
@@ -125,7 +165,7 @@ internal fun MoneyMate(onLogout: (() -> Unit)? = null) {
         ) { padding ->
             Box(Modifier.fillMaxSize().padding(padding)) {
                 when (page) {
-                    0 -> Dashboard(transactions, userName, onAdd = openManual, onLogout = onLogout)
+                    0 -> Dashboard(transactions, userName, onAdd = openManual, onOpenSettings = { showSettings = true }, onLogout = onLogout)
                     1 -> ActivityPage(
                         transactions = transactions,
                         onUpdate = { updated ->
@@ -160,17 +200,20 @@ internal fun MoneyMate(onLogout: (() -> Unit)? = null) {
                 }
             }
         )
+        } // [ADDED]
     }
 }
 
 @Composable
-private fun Dashboard(transactions: List<Transaction>, userName: String, onAdd: () -> Unit, onLogout: (() -> Unit)?) {
+private fun Dashboard(transactions: List<Transaction>, userName: String, onAdd: () -> Unit, onOpenSettings: () -> Unit, onLogout: (() -> Unit)?) {
     val income = transactions.filter { it.kind == TransactionKind.INCOME }.sumOf { it.amount }
     val expenses = transactions.filter { it.kind == TransactionKind.EXPENSE }.sumOf { it.amount }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.weight(1f)) { Title(if (userName.isBlank()) "Good morning" else "Good morning, $userName", "Your money snapshot") }
+                // [ADDED] gear icon that opens Settings
+                IconButton(onClick = onOpenSettings) { Icon(Icons.Default.Settings, "Settings", tint = Muted) }
                 if (onLogout != null) IconButton(onClick = onLogout) { Icon(Icons.Default.Logout, "Log out", tint = Muted) }
             }
         }
@@ -195,9 +238,9 @@ private fun Title(title: String, subtitle: String) {
 private fun BalanceCard(balance: Double, income: Double, expenses: Double) {
     Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Forest)) {
         Column(Modifier.fillMaxWidth().padding(24.dp)) {
-            Text("TOTAL BALANCE", color = Color(0xFFBCE0C9), letterSpacing = 1.sp, fontSize = 12.sp)
+            Text("TOTAL BALANCE", color = MoneyMateTheme.colors.balanceLabel, letterSpacing = 1.sp, fontSize = 12.sp)
             Text(currency(balance), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 34.sp, modifier = Modifier.padding(top = 4.dp))
-            HorizontalDivider(Modifier.padding(vertical = 20.dp), color = Color(0xFF426355))
+            HorizontalDivider(Modifier.padding(vertical = 20.dp), color = MoneyMateTheme.colors.balanceDivider)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 MiniValue("Money in", income, Color(0xFF8DE5B8)); MiniValue("Money out", expenses, Color(0xFFFFA2A7))
             }
@@ -206,11 +249,11 @@ private fun BalanceCard(balance: Double, income: Double, expenses: Double) {
 }
 
 @Composable
-private fun MiniValue(label: String, amount: Double, color: Color) { Column { Text(label, color = Color(0xFFBCE0C9), fontSize = 12.sp); Text(currency(amount), color = color, fontWeight = FontWeight.SemiBold) } }
+private fun MiniValue(label: String, amount: Double, color: Color) { Column { Text(label, color = MoneyMateTheme.colors.balanceLabel, fontSize = 12.sp); Text(currency(amount), color = color, fontWeight = FontWeight.SemiBold) } }
 
 @Composable
 private fun Summary(label: String, amount: Double, color: Color, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier) {
-    Card(modifier, shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) {
+    Card(modifier, shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = CardSurface)) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) { Icon(icon, null, tint = color); Spacer(Modifier.width(8.dp)); Column { Text(label, color = Muted, fontSize = 12.sp); Text(currency(amount), fontWeight = FontWeight.Bold) } }
     }
 }
@@ -260,7 +303,7 @@ private fun TransactionRow(transaction: Transaction, onClick: (() -> Unit)? = nu
     val symbol = when (transaction.category) { "Food" -> Icons.Default.Restaurant; "Transport" -> Icons.Default.DirectionsCar; "Housing" -> Icons.Default.Home; "Shopping" -> Icons.Default.ShoppingBag; "Salary" -> Icons.Default.AccountBalanceWallet; else -> Icons.Default.Payments }
     val amountColor = if (transaction.kind == TransactionKind.INCOME) Green else Red
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White)
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(CardSurface)
             .then(if (onClick == null) Modifier else Modifier.clickable(onClick = onClick))
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -369,7 +412,7 @@ private fun ReportsPage(transactions: List<Transaction>) {
                 customEnd = end
             }
         }
-        item { Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("EXPENSE BREAKDOWN", color = Muted, fontSize = 12.sp, letterSpacing = 1.sp); Spacer(Modifier.height(12.dp)); Donut(grouping, total); Text(currency(total), fontSize = 25.sp, fontWeight = FontWeight.Bold); Text("total spent", color = Muted, fontSize = 12.sp) } } }
+        item { Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = CardSurface)) { Column(Modifier.fillMaxWidth().padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text("EXPENSE BREAKDOWN", color = Muted, fontSize = 12.sp, letterSpacing = 1.sp); Spacer(Modifier.height(12.dp)); Donut(grouping, total); Text(currency(total), fontSize = 25.sp, fontWeight = FontWeight.Bold); Text("total spent", color = Muted, fontSize = 12.sp) } } }
         item { Text("By category", fontSize = 19.sp, fontWeight = FontWeight.Bold) }
         if (grouping.isEmpty()) item { Empty("No expenses yet", "Your spending report will appear here.") }
         items(grouping) { item -> CategoryBar(item.first, item.second, total) }
@@ -378,9 +421,10 @@ private fun ReportsPage(transactions: List<Transaction>) {
 
 @Composable
 private fun Donut(items: List<Pair<String, Double>>, total: Double) {
+    val emptyTrack = Mint // [CHANGED]
     Canvas(Modifier.size(175.dp)) {
         val width = 26.dp.toPx(); var start = -90f
-        if (total == 0.0) drawCircle(Mint, style = Stroke(width))
+        if (total == 0.0) drawCircle(emptyTrack, style = Stroke(width))
         items.forEach { item ->
             val sweep = (item.second / total * 360).toFloat()
             drawArc(categoryColor(item.first), start, sweep - 3f, false, Offset(width / 2, width / 2), Size(size.width - width, size.height - width), style = Stroke(width, cap = StrokeCap.Butt))
@@ -392,7 +436,7 @@ private fun Donut(items: List<Pair<String, Double>>, total: Double) {
 @Composable
 private fun CategoryBar(category: String, amount: Double, total: Double) {
     val progress = if (total == 0.0) 0f else (amount / total).toFloat()
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.White).padding(16.dp)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(category, fontWeight = FontWeight.SemiBold); Text(currency(amount), fontWeight = FontWeight.Bold) }; Spacer(Modifier.height(10.dp)); LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape), color = categoryColor(category), trackColor = Mint) }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(CardSurface).padding(16.dp)) { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(category, fontWeight = FontWeight.SemiBold); Text(currency(amount), fontWeight = FontWeight.Bold) }; Spacer(Modifier.height(10.dp)); LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(8.dp).clip(CircleShape), color = categoryColor(category), trackColor = Mint) }
 }
 
 @Composable
@@ -405,7 +449,7 @@ private fun BudgetPage(transactions: List<Transaction>) {
     val advice = when { budget == 0.0 -> "Set your monthly spending limit to begin estimating."; remaining < 0 -> "You are over budget. Consider postponing optional spending."; ratio > .8f -> "You are close to your spending limit. Plan the rest of the month carefully."; else -> "You are pacing well. Keep monitoring your biggest expense category." }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         Title("Budget planner", "See how far your money can go")
-        Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = Color.White)) { Column(Modifier.padding(20.dp)) { Text("MONTHLY SPENDING LIMIT", color = Muted, fontSize = 12.sp, letterSpacing = 1.sp); OutlinedTextField(input, { input = it.filter { character -> character.isDigit() || character == '.' } }, Modifier.fillMaxWidth().padding(top = 12.dp), prefix = { Text("$") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), shape = RoundedCornerShape(14.dp)); Spacer(Modifier.height(20.dp)); Text("${currency(kotlin.math.abs(remaining))} ${if (remaining >= 0) "left to spend" else "over budget"}", fontWeight = FontWeight.Bold, fontSize = 24.sp, color = if (remaining >= 0) Green else Red); Text("You have used ${(ratio * 100).toInt()}% of this budget", color = Muted, fontSize = 13.sp); Spacer(Modifier.height(14.dp)); LinearProgressIndicator(progress = { ratio }, modifier = Modifier.fillMaxWidth().height(12.dp).clip(CircleShape), color = if (ratio > .8f) Gold else Green, trackColor = Mint) } }
+        Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(containerColor = CardSurface)) { Column(Modifier.padding(20.dp)) { Text("MONTHLY SPENDING LIMIT", color = Muted, fontSize = 12.sp, letterSpacing = 1.sp); OutlinedTextField(input, { input = it.filter { character -> character.isDigit() || character == '.' } }, Modifier.fillMaxWidth().padding(top = 12.dp), prefix = { Text("$") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), shape = RoundedCornerShape(14.dp)); Spacer(Modifier.height(20.dp)); Text("${currency(kotlin.math.abs(remaining))} ${if (remaining >= 0) "left to spend" else "over budget"}", fontWeight = FontWeight.Bold, fontSize = 24.sp, color = if (remaining >= 0) Green else Red); Text("You have used ${(ratio * 100).toInt()}% of this budget", color = Muted, fontSize = 13.sp); Spacer(Modifier.height(14.dp)); LinearProgressIndicator(progress = { ratio }, modifier = Modifier.fillMaxWidth().height(12.dp).clip(CircleShape), color = if (ratio > .8f) Gold else Green, trackColor = Mint) } }
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Mint).padding(16.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Default.Lightbulb, null, tint = Green); Spacer(Modifier.width(12.dp)); Text(advice, fontSize = 14.sp, color = Ink) }
     }
 }
@@ -464,7 +508,8 @@ private fun AddTransaction(
 @Composable
 private fun Empty(title: String, subtitle: String) { Column(Modifier.fillMaxWidth().padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) { Icon(Icons.Default.Inbox, null, tint = Muted, modifier = Modifier.size(38.dp)); Text(title, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 8.dp)); Text(subtitle, color = Muted, fontSize = 13.sp, textAlign = TextAlign.Center) } }
 
-private fun categoryColor(category: String) = when (category) { "Food" -> Gold; "Transport" -> Blue; "Shopping" -> Red; "Housing" -> Green; else -> Color(0xFF9B78BF) }
+// [CHANGED] uses ChartRed/ChartGreen so the chart colors don't change in dark mode
+private fun categoryColor(category: String) = when (category) { "Food" -> Gold; "Transport" -> Blue; "Shopping" -> ChartRed; "Housing" -> ChartGreen; else -> Color(0xFF9B78BF) }
 private fun currency(value: Double): String = NumberFormat.getCurrencyInstance(Locale.US).format(value)
 private fun displayDate(value: Long): String = SimpleDateFormat("MMM d", Locale.US).format(Date(value))
 

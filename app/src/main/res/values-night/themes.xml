@@ -1,0 +1,10 @@
+<!-- [NEW FILE] Dark mode: dark window colors used before the app draws -->
+<resources>
+    <style name="Theme.MoneyMate" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowBackground">#0E1613</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">#10261F</item>
+        <item name="android:navigationBarColor">#0E1613</item>
+    </style>
+</resources>

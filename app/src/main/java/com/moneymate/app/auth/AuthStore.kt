@@ -11,11 +11,18 @@ import javax.crypto.spec.PBEKeySpec
 class AuthStore(context: Context) {
     private val prefs = context.getSharedPreferences("moneymate_auth", Context.MODE_PRIVATE)
     val displayName: String get() = prefs.getString("name", "") ?: ""
+    // [ADDED] email + "Email code at login" setting
+    val email: String get() = prefs.getString("email", "") ?: ""
+    var emailCodeAtLogin: Boolean
+        get() = email.isNotBlank() && prefs.getBoolean("email_code_at_login", true)
+        set(value) { prefs.edit().putBoolean("email_code_at_login", value).apply() }
     fun hasAccount(): Boolean = prefs.contains("hash") && prefs.contains("salt")
-    fun register(name: String, password: String) {
+    fun register(name: String, email: String, password: String) { // [CHANGED]
         val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
         prefs.edit()
             .putString("name", name.trim())
+            .putString("email", email.trim())               // [ADDED]
+            .putBoolean("email_code_at_login", true)        // [ADDED]
             .putString("salt", Base64.encodeToString(salt, Base64.NO_WRAP))
             .putString("hash", Base64.encodeToString(hash(password, salt), Base64.NO_WRAP))
             .commit()

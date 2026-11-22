@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- [ADDED] Needed to send and check email verification codes -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application android:allowBackup="true" android:label="MoneyMate" android:theme="@style/Theme.MoneyMate">
         <provider
             android:name=".receipt.ReceiptFileProvider"

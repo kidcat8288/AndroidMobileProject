@@ -6,6 +6,16 @@ Open this folder in Android Studio, let Gradle sync, and run the `app` configura
 
 Features: balance dashboard, locally stored transactions, search/filter activity history, spending reports, and a monthly budget estimator.
 
+## Settings and dark mode
+
+Tap the gear icon on Home to open **Settings**. Under **Appearance**, choose **Use device setting**, **Light**, or **Dark**. The choice applies right away, including on the login screen, and is kept on this device when you log out or replace the account. Theme code: `app/src/main/java/com/moneymate/app/settings/AppTheme.kt`; screen: `settings/SettingsScreen.kt`.
+
+## Email verification codes
+
+New accounts need a name, an email, and a password. MoneyMate emails a one-time code, and the account is saved only after the code is entered. Login then asks for a new code after the password; turn this off in **Settings > Email code at login**. Accounts created before this change have no email and log in with the password only.
+
+Codes are sent and checked by [Supabase Auth](https://supabase.com/docs/guides/auth/auth-email-passwordless), so no email password or code is stored in the app. To set it up:
+
 ## UI-only prototype
 
 Open `app/src/main/java/com/moneymate/app/prototype/MoneyMatePrototype.kt` in Android Studio and select **Split** or **Design** to see five Compose previews: Home, Activity, Reports, Budget, and receipt review. The prototype uses sample transactions and local UI state only. In Interactive Mode, tap an Activity row to edit an expense or salary income, or confirm deletion of an expense; its Home and Reports totals update on screen. These prototype changes reset when the preview restarts. It does not call the camera or OCR, save transactions, or alter the running app.
