@@ -13,8 +13,7 @@ Tap the gear icon on Home to open **Settings**. Under **Appearance**, choose **U
 ## Email verification codes
 
 New accounts need a name, an email, and a password. MoneyMate emails a one-time code, and the account is saved only after the code is entered. Login then asks for a new code after the password; turn this off in **Settings > Email code at login**. Accounts created before this change have no email and log in with the password only.
-
-Codes are sent and checked by [Supabase Auth](https://supabase.com/docs/guides/auth/auth-email-passwordless), so no email password or code is stored in the app. To set it up:
+Codes are sent and checked by [Supabase Auth](https://supabase.com/docs/guides/auth/auth-email-passwordless), so no email password or code is stored in the app.
 
 ## UI-only prototype
 
